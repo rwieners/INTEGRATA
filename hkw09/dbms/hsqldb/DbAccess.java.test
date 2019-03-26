@@ -1,0 +1,141 @@
+package de.unilog.hkw.gui;
+
+import java.text.*;
+import java.sql.*;
+
+/**
+ * Diese Klasse stellt Methoden für die OfenGUI zur Verfügung um die 
+ * Benutzeraktionen der User zu protokolieren und um eine Benutzer-
+ * Autentifizierung durchzuführen.
+ *
+ * Die Aktionen KOMMEN, GEHEN und VERBRENNEN werden in der Datenbank
+ * in der Tabelle OFENPROTOKOLL protokolliert.
+ *
+ * Bei der Aktion KOMMEN wird in der Datenbank-Tabelle PASSWORT für
+ * den eingegebenen Namen das Kennwort überprüft.
+ *
+ * Es werden allgemeine Methoden für den Verbindungsaufbau
+ * zur Datenbank und das Schliessen bereitgestellt.
+ *
+ * @version 2.6.107 krg hkw09
+ */
+public class DbAccess {
+  
+	//-----------------------------------------------------------------------
+  // Default Datenbankzugriffs Attribute
+  private SimpleDateFormat sdf = new SimpleDateFormat("hh:mm:ss dd.MM.yyyy");
+  private String dbDriver = "org.hsqldb.jdbcDriver";
+  private String dbURL = "jdbc:hsqldb:hsql://localhost";
+  /* Alternative für Angabe der URL bei MS Access
+  private String dbFile = "DBQ=c:/_training/etc/ofen.mdb";
+  private String dbURL = "jdbc:odbc:Driver={Microsoft Access Driver (*.mdb)};"
+  		+ dbFile;
+  */
+  private String dbUser = "sa";
+  private String dbPwd = "";
+	private Connection dbConn = null;  
+	private Statement dbStmt = null;
+	
+	/**
+   * Die Verbindung zur Datenbank wird erzeugt und ein Statement-Objekt
+   * für die SQL-Kommandos bereitgestellt.
+   */ 
+  private void dbConnect() {
+  	if (dbConn != null) {
+      System.out.println("dbConnect() dbConn=" + dbConn);
+      return;
+  	}
+  	
+    try {
+      System.out.println("DB-Treiber laden");
+      Class.forName(dbDriver);
+      
+    	System.out.println("  getConnection(): URL=" + dbURL);
+      dbConn = DriverManager.getConnection(dbURL, dbUser, dbPwd);
+      dbStmt = dbConn.createStatement();
+    }
+    catch (SQLException sqle) {
+      System.out.println("dbConnect() SQLFehler: "+ sqle);
+    }
+    catch (Exception e) {
+      System.out.println("dbConnect() DB-Treiber nicht ladbar: " + e);
+    }
+  }  
+
+
+	/**
+   * Die Verbindung zur Datenbank wird getrennt.
+   */ 
+  public void dbClose() {
+    System.out.println("dbCose()");
+    try {
+      if (dbStmt != null) dbStmt.close();
+      if (dbConn != null) dbConn.close();
+    }
+    catch(SQLException sqle) {
+      System.out.println("dbClose() SQLFehler: "+ sqle);
+    }
+    finally {
+    	if (dbConn != null) {
+    		try {dbConn.close();} catch(Exception e) { /*ignore*/ };
+    	}
+    }
+    dbConn = null;
+  }  
+
+
+  /**
+   * Uhrzeit und Aktion (kommen, gehen, verbrennen) werden protokolliert.
+   * Anschließend wird die Verbindung getrennt.
+   */
+  public void dbAktion(String name, String action, java.util.Date date) {
+    System.out.println("dbAktion=" + action);
+    if (dbConn == null) {
+    	dbConnect();
+  	}
+    try {
+      String sSQL = "Insert into ofenprotokoll (name,aktion,zeit) values ('"
+        + name + "','" + action + "','" + sdf.format(date) + "');";
+      System.out.println(" executeUpdate() SQL=" + sSQL);
+      if (dbStmt != null) {
+      	dbStmt.executeUpdate(sSQL); 
+      }
+    }
+    catch (SQLException sqle) {
+      System.out.println("dbAktion() SQLFehler: "+ sqle);
+      sqle.printStackTrace();
+    }
+    this.dbClose();
+  }  
+
+
+	/**
+   * Überprüfung des Benutzer-Kennwortes.
+   */ 
+  public boolean dbCheckUser(String user, String pwd) {
+  	boolean pwdOk = false;
+  	ResultSet rs;
+  	
+    System.out.println("dbCheckUser(): user=" + user + ", pwd=" + pwd);
+    try {
+	    if (dbConn == null) {
+	    	dbConnect();
+	  	}
+	  	if (dbStmt != null) {
+	  		String sSQL = "select * from Mitarbeiter where user = '" + user
+	  				+ "' AND Password = '" + pwd + "';";
+	  		System.out.println("dbCheckUser(): query=" + sSQL);
+	  		rs = dbStmt.executeQuery(sSQL);
+	  		if (rs.next()) {		// user und pwd in Datenbank gefunden
+	  			pwdOk = true;
+	  		}
+	  	}
+    }
+    catch(SQLException sqle) {
+      System.out.println("dbCheckUser() SQLFehler: "+ sqle);
+      sqle.printStackTrace();
+    }
+    this.dbClose();
+    return pwdOk;
+  }  
+}
